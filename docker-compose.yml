@@ -1,0 +1,64 @@
+version: '3'
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DD_AGENT_HOST=datadog
+      - DD_TRACE_AGENT_PORT=8126
+      - DD_ENV=development
+      - DD_SERVICE=rails-app
+      - DD_VERSION=1.0
+      - DD_TRACE_ANALYTICS_ENABLED=true
+      - DATABASE_URL=mysql2://root:password@db:3306/rails_app_development
+    depends_on:
+      db:
+        condition: service_healthy
+      datadog:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: bash -c "rm -f tmp/pids/server.pid && bundle exec rails server -b 0.0.0.0"
+
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: rails_app_development
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  datadog:
+    image: datadog/agent:latest
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_LOGS_ENABLED=true
+      - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      - DD_APM_RECEIVER_PORT=8126
+      - DD_APM_RECEIVER_SOCKET=/var/run/datadog/apm.socket
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_APM_ANALYZED_SPANS=rails.request=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./datadog.yaml:/etc/datadog-agent/datadog.yaml:ro
+      - /var/run/datadog:/var/run/datadog
+    ports:
+      - "8126:8126"
+    healthcheck:
+      test: ["CMD", "agent", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data: 
